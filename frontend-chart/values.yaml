@@ -1,0 +1,16 @@
+image:
+  repository: yourdockerhub/student-frontend
+  tag: "dev"
+  pullPolicy: IfNotPresent
+
+service:
+  name: student-frontend
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: student-dev.local
+  path: /
+
+resources: {}

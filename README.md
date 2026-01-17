@@ -1,2 +1,0 @@
-# typ-frontend
-typ-frontend
