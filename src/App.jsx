@@ -107,7 +107,7 @@ export default function App() {
   return (
     <div className="container">
       <header className="header">
-        <h1>Student Manager</h1>
+        <h1>Student Manager - V1.0.2</h1>
       </header>
 
       {error ? <div className="error">{error}</div> : null}
