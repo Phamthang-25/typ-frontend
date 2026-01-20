@@ -13,15 +13,21 @@ pipeline {
   triggers {
     GenericTrigger(
       token: 'typ-fe',
-      causeString: 'Triggered by GitHub tag: $ref',
+      causeString: 'Triggered by GitHub ref: $GH_REF',
+
       genericVariables: [
+        // GitHub push/create đều có "ref" (push: "refs/tags/vX" hoặc "refs/heads/main")
         [key: 'GH_REF', value: '$.ref'],
+        // GitHub create event có ref_type ("tag"/"branch"), push event thường không có
         [key: 'GH_REF_TYPE', value: '$.ref_type']
       ],
+
       printContributedVariables: true,
       printPostContent: true,
-      regexpFilterText: '$GH_REF_TYPE',
-      regexpFilterExpression: '^tag$'
+
+      // Filter theo ref bắt đầu bằng refs/tags/
+      regexpFilterText: '$GH_REF',
+      regexpFilterExpression: '^refs/tags/.*'
     )
   }
 
@@ -48,18 +54,35 @@ pipeline {
       }
     }
 
-    stage('Get Tag From Webhook') {
+    stage('Resolve Tag') {
       steps {
         script {
-          if (env.GH_REF?.trim() && env.GH_REF_TYPE == 'tag') {
-            env.TAG_NAME = env.GH_REF.trim()
-            echo "Using tag from webhook: ${env.TAG_NAME}"
+          echo "Webhook payload vars: GH_REF='${env.GH_REF}', GH_REF_TYPE='${env.GH_REF_TYPE}'"
+
+          // Nếu webhook có ref dạng refs/tags/<tag> thì strip prefix để lấy tag sạch
+          if (env.GH_REF?.trim()) {
+            def ref = env.GH_REF.trim()
+
+            if (ref.startsWith('refs/tags/')) {
+              env.TAG_NAME = ref.replace('refs/tags/', '').trim()
+              echo "Resolved tag from webhook ref: ${env.TAG_NAME}"
+            } else {
+              echo "Webhook ref is not a tag ref ('${ref}'). Fallback to git describe..."
+            }
           } else {
-            echo "No tag payload from webhook (manual build or wrong event). Fallback to git describe..."
+            echo "No GH_REF from webhook. Fallback to git describe..."
+          }
+
+          // Fallback khi build manual hoặc webhook không đủ dữ liệu
+          if (!env.TAG_NAME?.trim()) {
             sh 'git fetch --tags --force || true'
 
             def tagVersion = sh(
-              script: 'git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD',
+              script: '''
+                git describe --tags --exact-match 2>/dev/null \
+                || git describe --tags --abbrev=0 2>/dev/null \
+                || git rev-parse --short HEAD
+              ''',
               returnStdout: true
             ).trim()
 
@@ -72,19 +95,21 @@ pipeline {
       }
     }
 
-    stage('Checkout Tag (when tag build)') {
+    stage('Checkout Tag (tag build)') {
       steps {
         script {
-          if (env.GH_REF?.trim() && env.GH_REF_TYPE == 'tag') {
+          // Nếu có TAG_NAME thì checkout tag luôn để đảm bảo build đúng source của tag
+          if (env.TAG_NAME?.trim()) {
             echo "Checking out tag: ${env.TAG_NAME}"
             sh """
               git fetch --tags --force
-              git checkout -f refs/tags/${env.TAG_NAME}
+              git checkout -f tags/${env.TAG_NAME}
+              echo "HEAD after checkout:"
               git rev-parse HEAD
-              git describe --tags --exact-match
+              git describe --tags --exact-match || true
             """
           } else {
-            echo "Not a tag build -> keep current checkout"
+            error("TAG_NAME is empty -> cannot checkout tag")
           }
         }
       }
@@ -137,7 +162,7 @@ pipeline {
                 git clone ${env.CONFIG_REPO_URL} .
                 git checkout ${env.BRANCH}
                 git config user.email "jenkins@local"
-                git config user.name "Jenkins CI/CD Backend"
+                git config user.name "Jenkins CI/CD Frontend"
               """
             }
             sh 'ls -la'
@@ -171,7 +196,7 @@ pipeline {
               echo "Changes detected, committing and pushing..."
               sh """
                 git add ${env.VALUES_FILE}
-                git commit -m "Update backend image tag to ${env.TAG_NAME} (build ${env.BUILD_NUMBER})"
+                git commit -m "Update frontend image tag to ${env.TAG_NAME} (build ${env.BUILD_NUMBER})"
               """
               withCredentials([gitUsernamePassword(credentialsId: env.GITHUB_CREDENTIALS, gitToolName: 'Default')]) {
                 sh "git push origin ${env.BRANCH}"
