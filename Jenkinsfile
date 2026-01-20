@@ -5,7 +5,7 @@ pipeline {
     IMAGE_NAME = 'thang05/typ-frontend'
     DOCKER_HUB_CREDENTIALS = 'dockerhub-creds'
     GITHUB_CREDENTIALS = 'git-hub'
-    CONFIG_REPO_URL = 'https://github.com/Phamthang-25/typ-frontend-config.git'
+    CONFIG_REPO_URL = 'https://github.com/Phamthang-25/typ-backend-config.git'
     VALUES_FILE = 'helm-values/values-prod.yaml'
     BRANCH = 'main'
   }
