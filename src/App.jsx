@@ -107,7 +107,7 @@ export default function App() {
   return (
     <div className="container">
       <header className="header">
-        <h1>Student Manager - V1.0.2</h1>
+        <h1>Student Manager - v2.0.0</h1>
       </header>
 
       {error ? <div className="error">{error}</div> : null}
@@ -147,7 +147,7 @@ export default function App() {
         </section>
 
         <section className="card">
-          <h2>Danh sách sinh viên</h2>
+          <h2>Danh sách sinh viên - V2.0.2</h2>
           <div className="toolbar">
             <input
               className="search"

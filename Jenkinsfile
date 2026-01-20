@@ -10,6 +10,21 @@ pipeline {
     BRANCH = 'main'
   }
 
+  triggers {
+    GenericTrigger(
+      token: 'typ-fe',
+      causeString: 'Triggered by GitHub tag: $ref',
+      genericVariables: [
+        [key: 'GH_REF', value: '$.ref'],
+        [key: 'GH_REF_TYPE', value: '$.ref_type']
+      ],
+      printContributedVariables: true,
+      printPostContent: true,
+      regexpFilterText: '$GH_REF_TYPE',
+      regexpFilterExpression: '^tag$'
+    )
+  }
+
   stages {
 
     stage('Agent Information') {
@@ -33,21 +48,44 @@ pipeline {
       }
     }
 
-    stage('Get Git Tag Version') {
+    stage('Get Tag From Webhook') {
       steps {
         script {
-          echo "Getting Git tag version..."
-          sh 'git log --oneline -n 5 || true'
-          sh 'git tag --list | tail -n 20 || true'
+          if (env.GH_REF?.trim() && env.GH_REF_TYPE == 'tag') {
+            env.TAG_NAME = env.GH_REF.trim()
+            echo "Using tag from webhook: ${env.TAG_NAME}"
+          } else {
+            echo "No tag payload from webhook (manual build or wrong event). Fallback to git describe..."
+            sh 'git fetch --tags --force || true'
 
-          def tagVersion = sh(
-            script: 'git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD',
-            returnStdout: true
-          ).trim()
+            def tagVersion = sh(
+              script: 'git describe --tags --exact-match 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD',
+              returnStdout: true
+            ).trim()
 
-          env.TAG_NAME = tagVersion
-          echo "Using tag version: ${env.TAG_NAME}"
+            env.TAG_NAME = tagVersion
+            echo "Using fallback version: ${env.TAG_NAME}"
+          }
+
           echo "Docker image will be: ${env.IMAGE_NAME}:${env.TAG_NAME}"
+        }
+      }
+    }
+
+    stage('Checkout Tag (when tag build)') {
+      steps {
+        script {
+          if (env.GH_REF?.trim() && env.GH_REF_TYPE == 'tag') {
+            echo "Checking out tag: ${env.TAG_NAME}"
+            sh """
+              git fetch --tags --force
+              git checkout -f refs/tags/${env.TAG_NAME}
+              git rev-parse HEAD
+              git describe --tags --exact-match
+            """
+          } else {
+            echo "Not a tag build -> keep current checkout"
+          }
         }
       }
     }
